@@ -1,8 +1,8 @@
 from telebot import TeleBot
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-from MenuManager import MenuManager
-from my_bot.shopping_bot.bot.storage import Storage
+from .MenuManager import MenuManager
+from .storage import Storage
 
 class Bot:
     def __init__(self,token):
@@ -316,6 +316,4 @@ from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
 
-if __name__ == "__main__":
-    dispatcher = Dispatcher(TOKEN)   # ← только диспетчер
-    dispatcher.start()
+
