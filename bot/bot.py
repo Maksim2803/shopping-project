@@ -16,8 +16,8 @@ class Dispatcher(Bot):
     def __init__(self,token):
         super().__init__(token)
         self.storage = Storage("files")
-        self.board={"Главное меню":[["Мясное"], ["Очистить список","Полный список"],["Добавить кнопку","Удалить кнопку"]], "Мясное":[["Колбаса", "Мясо", "Митболы", "Курица"], ["Назад"]]}
-        self.menu_manager = MenuManager(self.board)
+        # self.board={"Главное меню":[["Мясное"], ["Очистить список","Полный список"],["Добавить кнопку","Удалить кнопку"]], "Мясное":[["Колбаса", "Мясо", "Митболы", "Курица"], ["Назад"]]}
+        self.menu_manager = MenuManager()
         self.register_handler()
         self.users={}
 
@@ -27,7 +27,7 @@ class Dispatcher(Bot):
             user=self.get_users(message.chat.id)
             user.get_status(None)
             self.load_file(message.chat.id,user)
-            self.handle_start(message)
+            self.handle_start(user)
         @self.bot.message_handler(func=lambda message: True)
         def all_message(message):
             uid=message.chat.id
@@ -44,12 +44,11 @@ class Dispatcher(Bot):
                 user.get_status(None)
                 user.temp_category = None
                 user.temp_product = None
-                self.get_menu(call.from_user.id)
+                self.get_menu(user)
                 return
             user.temp_category=category
-    def handle_start(self, message):
-        uid=message.chat.id
-        self.get_menu(uid)
+    def handle_start(self,user):
+        self.get_menu(user)
 
     def handle_callback_message(self,call,user):
         uid = call.from_user.id
@@ -66,8 +65,9 @@ class Dispatcher(Bot):
             self.get_menu(call.message.chat.id,"Выбери кнопку, которую хочешь удалить",call.data)
             return category
         return None
-    def creation_inline(self):
-        new_keyboard=self.menu_manager.creation_button()
+    def creation_inline(self,user):
+        board=user.board
+        new_keyboard=self.menu_manager.creation_button(board)
         keyboard = InlineKeyboardMarkup()
         for cup in new_keyboard:
             keyboard.row(*[InlineKeyboardButton(i, callback_data=i) for i in cup])
@@ -80,16 +80,17 @@ class Dispatcher(Bot):
         text=message.text
         state_user=user.show_status()
         category=user.temp_category
+        board=user.board
         if text=="Назад":
-            self.get_menu(uid)
+            self.get_menu(user)
             user.get_status(None)
             return
         if state_user=="Добавление количества":
             if self.menu_manager.check_isdigit(text):
                 product=user.get_temp_product()
-                self.append_cart(product,uid,text,user)
+                self.append_cart(product,user,text)
             else:
-                self.get_menu(uid,"Количество продукта не добавлено, необходимо ввести количество в виде целого числа")
+                self.get_menu(user,"Количество продукта не добавлено, необходимо ввести количество в виде целого числа")
             user.get_status(None)
             self.save_file(uid,user)
             return
@@ -112,18 +113,18 @@ class Dispatcher(Bot):
             user.get_status("Редактирование списка")
             return
         if text=="Очистить список":
-            self.clear_user_cart(uid,user)
+            self.clear_user_cart(user)
             self.save_file(uid,user)
             return
         if text=="Добавить кнопку" or text=="Удалить кнопку":
             self.add_or_dell_button(uid,user,text)
             return
         if text =="/Выключить" or text=="/Включить":
-            self.turn_counter(uid,user,text)
+            self.turn_counter(user,text)
             self.save_file(uid,user)
             return
-        if text in self.board.keys():
-            self.get_menu(uid,"Выбери продукт",text)
+        if text in board.keys():
+            self.get_menu(user,"Выбери продукт",text)
             return
         if text:
             if user.state_counter() == True:
@@ -132,12 +133,13 @@ class Dispatcher(Bot):
             self.append_cart(text, uid,user)
             self.save_file(uid,user)
             return
-    def get_menu(self,uid,message="Выбери категорию",name="Главное меню"):
-        if name in self.board.keys():
+    def get_menu(self,user,message="Выбери категорию",name="Главное меню"):
+        board=user.board
+        if name in board.keys():
             keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-            for i in self.board[name]:
+            for i in board[name]:
                 keyboard.row(*[KeyboardButton(btn) for btn in i])
-            self.bot.send_message(uid, message, reply_markup=keyboard)
+            self.bot.send_message(user.uid, message, reply_markup=keyboard)
             return keyboard
         return None
     def get_users(self,uid):
@@ -150,29 +152,27 @@ class Dispatcher(Bot):
     def save_file(self,uid,user):
         cart=user.show_cart()
         counter=user.state_counter()
+        board=user.board
         data={}
-        data[uid]={"board":self.board,"cart":cart,"counter":counter}
+        data[uid]={"board":board,"cart":cart,"counter":counter}
         self.storage.save(data)
         return uid
     def load_file(self,uid,user):
         uid=str(uid)
         data=self.storage.load()
         try:
-            user.get_cart(data[uid]["cart"])
-            self.board.clear()
-            self.board.update(data[uid]["board"])
-            user.get_counter(data[uid]["counter"])
+            user.load_data(data)
         except KeyError:
             return self.save_file(uid,user)
         return
 
-    def turn_counter(self,uid,user,text):
+    def turn_counter(self,user,text):
         if text=="/Включить":
             user.get_counter(True)
-            self.get_menu(uid,"Счетчик включен")
+            self.get_menu(user,"Счетчик включен")
         elif text=="/Выключить":
             user.get_counter(False)
-            self.get_menu(uid, "Счетчик выключен")
+            self.get_menu(user, "Счетчик выключен")
         return
     def add_quantity(self,uid,user,product):
         user.set_temp_product(product)
@@ -187,7 +187,8 @@ class Dispatcher(Bot):
 
 
     def add_or_dell_button(self,uid,user,text):
-        keyboard=self.creation_inline()
+        board=user.board
+        keyboard=self.creation_inline(board)
         if text == "Добавить кнопку":
             self.bot.send_message(uid, """В какую категорию добавить кнопку?
 Если хотите отменить действие нажмите [стоп]""", reply_markup=keyboard)
@@ -198,53 +199,56 @@ class Dispatcher(Bot):
             user.get_status("Удаление кнопки")
         return uid
     def add_button(self,text,uid,user,category):
-        button=self.menu_manager.add_button_part1(text,category)
+        board=user.board
+        button=self.menu_manager.add_button_part1(text,category,board)
         if button=="name is taken":
-            self.get_menu(uid,"Кнопка с таким именем уже есть, выберете другое имя")
+            self.get_menu(user,"Кнопка с таким именем уже есть, выберете другое имя")
             user.get_status(None)
         elif button=="name unavailable":
-            self.get_menu(uid,"Недопустимое имя кнопки, выберите другое имя")
+            self.get_menu(user,"Недопустимое имя кнопки, выберите другое имя")
             user.get_status(None)
         elif button=="category not selected":
             keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
             self.bot.send_message(uid, "Выберите категорию из списка", reply_markup=keyboard)
             self.add_or_dell_button(uid,user,"Добавить кнопку")
         else:
-            self.get_menu(uid,"Кнопка добавлена",category)
+            self.get_menu(user,"Кнопка добавлена",category)
             user.get_status(None)
         return uid
     def del_button(self,text,uid,user,category):
-        button=self.menu_manager.delete_buttons(text,category)
+        board=user.board
+        button=self.menu_manager.delete_buttons(text,category,board)
         if button=="KeyError":
             self.bot.send_message(uid, "Необходимо выбрать категорию")
             self.add_or_dell_button(uid,user, "Удалить кнопку")
         elif button=="prohibited for removal":
-            self.get_menu(uid,f"Извини, кнопку [{text}] нельзя удалить. Удаление данной кнопки нарушит работу бота")
+            self.get_menu(user,f"Извини, кнопку [{text}] нельзя удалить. Удаление данной кнопки нарушит работу бота")
             self.add_or_dell_button(uid,user, "Удалить кнопку")
         else:
-            self.get_menu(uid,f"Кнопка {text} удалена",category)
+            self.get_menu(user,f"Кнопка {text} удалена",category)
             user.get_status(None)
         return uid
 
-    def append_cart(self,product,uid,user,quantity=0):
+
+    def append_cart(self,product,user,quantity=0):
         user.append_product(product,quantity)
         if quantity!=0:
-            self.get_menu(uid, f"Добавил {product}-{quantity}шт")
+            self.get_menu(user, f"Добавил {product}-{quantity}шт")
         else:
-            self.get_menu(uid,f"Добавил {product}")
+            self.get_menu(user,f"Добавил {product}")
     def red_user_cart(self,uid,user,product):
         if not user.red_cart(product):
-            self.get_menu(uid,"Cписок покупок пуст")
+            self.get_menu(user,"Cписок покупок пуст")
             return None
         self.full_user_cart(uid,user)
         return uid
-    def clear_user_cart(self,uid,user):
+    def clear_user_cart(self,user):
         user.clear_cart()
-        self.get_menu(uid,"Список покупок очищен")
+        self.get_menu(user,"Список покупок очищен")
         return
     def full_user_cart(self,uid,user):
         if not user.full_cart():
-            self.get_menu(uid,"Список покупок пуст")
+            self.get_menu(user,"Список покупок пуст")
         else:
             text_spisok, keyboard=user.full_cart()
             self.bot.send_message(uid, f"{"".join(text_spisok)}", reply_markup=keyboard)
@@ -252,6 +256,9 @@ class Dispatcher(Bot):
 
 class User:
     def __init__(self,uid):
+        self.board = {
+            "Главное меню": [["Мясное"], ["Очистить список", "Полный список"], ["Добавить кнопку", "Удалить кнопку"]],
+            "Мясное": [["Колбаса", "Мясо", "Митболы", "Курица"], ["Назад"]]}
         self.uid=uid
         self.cart=[]
         self.state=None
@@ -310,6 +317,14 @@ class User:
         return self.temp_product
     def get_temp_product(self):
         return self.temp_product
+    def load_data(self,data):
+        uid = str(self.uid)
+        self.get_cart(data[uid]["cart"])
+        self.board.clear()
+        self.board.update(data[uid]["board"])
+        self.get_counter(data[uid]["counter"])
+        return self.board
+
 
 import os
 from dotenv import load_dotenv
