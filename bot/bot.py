@@ -127,7 +127,7 @@ class Dispatcher(Bot):
             if user.state_counter() == True:
                 self.add_quantity(uid,user,text)
                 return
-            self.append_cart(text, uid,user)
+            self.append_cart(text,user)
             self.save_file(uid,user)
             return
     def get_menu(self,user,message="Выбери категорию",name="Главное меню"):
