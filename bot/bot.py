@@ -62,18 +62,15 @@ class Dispatcher(Bot):
             self.bot.send_message(call.message.chat.id, "Введи название кнопки, которую хочешь добавить")
             return category
         elif user_state == "Удаление кнопки":
-            self.get_menu(call.message.chat.id,"Выбери кнопку, которую хочешь удалить",call.data)
+            self.get_menu(user,"Выбери кнопку, которую хочешь удалить",call.data)
             return category
         return None
-    def creation_inline(self,user):
-        board=user.board
+    def creation_inline(self,board):
         new_keyboard=self.menu_manager.creation_button(board)
         keyboard = InlineKeyboardMarkup()
         for cup in new_keyboard:
             keyboard.row(*[InlineKeyboardButton(i, callback_data=i) for i in cup])
         return keyboard
-
-
 
     def handle_message(self, message,user):
         uid = message.chat.id
